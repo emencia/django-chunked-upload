@@ -1,7 +1,6 @@
 import time
 import os.path
 import hashlib
-import uuid
 
 from django.db import models
 from django.conf import settings
@@ -14,18 +13,13 @@ from .constants import CHUNKED_UPLOAD_CHOICES, UPLOADING
 AUTH_USER_MODEL = getattr(settings, 'AUTH_USER_MODEL', 'auth.User')
 
 
-def generate_upload_id():
-    return uuid.uuid4().hex
-
-
 def generate_filename(instance, filename):
     filename = os.path.join(UPLOAD_PATH, instance.upload_id + '.part')
     return time.strftime(filename)
 
 
 class ChunkedUpload(models.Model):
-    upload_id = models.CharField(max_length=32, unique=True, editable=False,
-                                 default=generate_upload_id)
+    upload_id = models.CharField(max_length=32, unique=True, editable=False)
     file = models.FileField(max_length=255, upload_to=generate_filename,
                             storage=STORAGE)
     filename = models.CharField(max_length=255)

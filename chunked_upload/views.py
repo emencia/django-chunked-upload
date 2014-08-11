@@ -1,7 +1,6 @@
 import re
 
 from django.views.generic import View
-from django.shortcuts import get_object_or_404
 from django.core.files.base import ContentFile
 from django.utils import timezone
 
@@ -98,7 +97,7 @@ class ChunkedUploadView(ChunkedUploadBaseView):
     """
 
     field_name = 'file'
-    content_range_pattern = re.compile(r'^bytes (?P<start>\d+)-(?P<end>\d+)/')
+    content_range_pattern = re.compile(r'^bytes (?P<start>\d+)-(?P<end>\d+)/(?P<total>\d+)')
 
     def get_extra_attrs(self, request):
         """
@@ -149,15 +148,18 @@ class ChunkedUploadView(ChunkedUploadBaseView):
                                      detail='No chunk file was submitted')
         self.validate(request)
 
-        upload_id = request.POST.get('upload_id')
-        if upload_id:
-            chunked_upload = get_object_or_404(self.get_queryset(request),
-                                               upload_id=upload_id)
-            self.is_valid_chunked_upload(chunked_upload)
-        else:
-            attrs = {'user': request.user, 'filename': chunk.name}
+        upload_id = request.POST.get('md5')
+        queryset = self.get_queryset(request)
+        try:
+            chunked_upload = queryset.get(upload_id=upload_id)
+        except self.model.DoesNotExist:
+            attrs = {'upload_id': upload_id,
+                     'user': request.user,
+                     'filename': chunk.name}
             attrs.update(self.get_extra_attrs(request))
             chunked_upload = self.create_chunked_upload(save=False, **attrs)
+        else:
+            self.is_valid_chunked_upload(chunked_upload)
 
         content_range = request.META.get('HTTP_CONTENT_RANGE', '')
         match = self.content_range_pattern.match(content_range)
@@ -177,54 +179,19 @@ class ChunkedUploadView(ChunkedUploadBaseView):
 
         self._save(chunked_upload)
 
-        return Response(self.get_response_data(chunked_upload, request),
-                        status=http_status.HTTP_200_OK)
+        # Case 1: upload is not complete
+        total = int(match.group('total'))
+        if end < total:
+            return Response(self.get_response_data(chunked_upload, request),
+                            status=http_status.HTTP_200_OK)
 
-
-class ChunkedUploadCompleteView(ChunkedUploadBaseView):
-    """
-    Completes an chunked upload. Method `on_completion` is a placeholder to
-    define what to do when upload is complete.
-    """
-
-    def on_completion(self, uploaded_file, request):
-        """
-        Placeholder method to define what to do when upload is complete.
-        """
-
-    def is_valid_chunked_upload(self, chunked_upload):
-        """
-        Check if chunked upload is already complete.
-        """
+        # Case 2: Upload is complete
         if chunked_upload.status == COMPLETE:
             error_msg = "Upload has already been marked as complete"
             return ChunkedUploadError(status=http_status.HTTP_400_BAD_REQUEST,
                                       detail=error_msg)
 
-    def md5_check(self, chunked_upload, md5):
-        """
-        Verify if md5 checksum sent by client matches generated md5.
-        """
-        if chunked_upload.md5 != md5:
-            chunked_upload.status = FAILED
-            self._save(chunked_upload)
-            raise ChunkedUploadError(status=http_status.HTTP_400_BAD_REQUEST,
-                                     detail='md5 checksum does not match')
-
-    def _post(self, request, *args, **kwargs):
-        upload_id = request.POST.get('upload_id')
-        md5 = request.POST.get('md5')
-        if not upload_id or not md5:
-            error_msg = "Both 'upload_id' and 'md5' are required"
-            raise ChunkedUploadError(status=http_status.HTTP_400_BAD_REQUEST,
-                                     detail=error_msg)
-        self.validate(request)
-
-        chunked_upload = get_object_or_404(self.get_queryset(request),
-                                           upload_id=upload_id)
-        self.is_valid_chunked_upload(chunked_upload)
-        self.md5_check(chunked_upload, md5)
-
+        self.md5_check(chunked_upload, upload_id)
         chunked_upload.status = COMPLETE
         chunked_upload.completed_on = timezone.now()
         self._save(chunked_upload)
@@ -232,3 +199,21 @@ class ChunkedUploadCompleteView(ChunkedUploadBaseView):
 
         return Response(self.get_response_data(chunked_upload, request),
                         status=http_status.HTTP_200_OK)
+
+
+    def md5_check(self, chunked_upload, md5):
+        """
+        Verify if md5 checksum sent by client matches generated md5.
+        """
+        chunked_upload.file.open(mode='rb')  # mode = read+binary
+        if chunked_upload.md5 != md5:
+            chunked_upload.status = FAILED
+            self._save(chunked_upload)
+            raise ChunkedUploadError(status=http_status.HTTP_400_BAD_REQUEST,
+                                     detail='md5 checksum does not match')
+
+
+    def on_completion(self, uploaded_file, request):
+        """
+        Placeholder method to define what to do when upload is complete.
+        """
