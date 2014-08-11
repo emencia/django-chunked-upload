@@ -195,10 +195,7 @@ class ChunkedUploadView(ChunkedUploadBaseView):
         chunked_upload.status = COMPLETE
         chunked_upload.completed_on = timezone.now()
         self._save(chunked_upload)
-        self.on_completion(chunked_upload.get_uploaded_file(), request)
-
-        return Response(self.get_response_data(chunked_upload, request),
-                        status=http_status.HTTP_200_OK)
+        return self.on_completion(chunked_upload, request)
 
 
     def md5_check(self, chunked_upload, md5):
@@ -213,7 +210,9 @@ class ChunkedUploadView(ChunkedUploadBaseView):
                                      detail='md5 checksum does not match')
 
 
-    def on_completion(self, uploaded_file, request):
+    def on_completion(self, chunked_upload, request):
         """
         Placeholder method to define what to do when upload is complete.
         """
+        return Response(self.get_response_data(chunked_upload, request),
+                        status=http_status.HTTP_200_OK)
