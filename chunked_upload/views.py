@@ -3,9 +3,11 @@
 import re
 
 # Import from Django
-from django.views.generic import View
 from django.core.files.base import ContentFile
 from django.utils import timezone
+
+# Import from Django Rest Framework
+from rest_framework.views import APIView
 
 # Import from here
 from .models import ChunkedUpload
@@ -14,7 +16,7 @@ from .constants import COMPLETE, FAILED
 from .exceptions import BadRequest, Gone
 
 
-class ChunkedUploadBaseView(View):
+class ChunkedUploadBaseView(APIView):
     """
     Base view for the rest of chunked upload views.
     """
@@ -28,6 +30,13 @@ class ChunkedUploadBaseView(View):
         By default, user can only continue uploading his own uploads.
         """
         return self.model.objects.filter(user=request.user)
+
+    def get_upload(self, request, upload_id):
+        queryset = self.get_queryset(request)
+        try:
+            return queryset.get(upload_id=upload_id)
+        except self.model.DoesNotExist:
+            return None
 
     def validate(self, request):
         """
@@ -148,13 +157,11 @@ class ChunkedUploadView(ChunkedUploadBaseView):
         self.validate(request)
 
         # Get or create the model
-        queryset = self.get_queryset(request)
-        try:
-            chunked_upload = queryset.get(upload_id=upload_id)
-        except self.model.DoesNotExist:
-            chunked_upload = self.create_chunked_upload(request, upload_id, chunk)
-        else:
+        chunked_upload = self.get_upload(request, upload_id)
+        if chunked_upload:
             self.is_valid_chunked_upload(chunked_upload)
+        else:
+            chunked_upload = self.create_chunked_upload(request, upload_id, chunk)
 
         if chunked_upload.offset != start:
             if start == 0:
@@ -202,3 +209,13 @@ class ChunkedUploadView(ChunkedUploadBaseView):
         """
         return Response(self.get_response_data(chunked_upload, request),
                         status=200)
+
+
+
+class ChunkedUploadOffsetView(ChunkedUploadBaseView):
+
+    def get(self, request, *args, **kw):
+        upload_id = kw['md5']
+        chunked_upload = self.get_upload(request, upload_id)
+        offset = chunked_upload.offset if chunked_upload else 0
+        return Response({'offset': offset}, status=200)
