@@ -2,12 +2,12 @@
 Exceptions raised by django-chunked-upload.
 """
 
+from rest_framework.exceptions import APIException
 
-class ChunkedUploadError(Exception):
-    """
-    Exception raised if errors in the request/process.
-    """
 
-    def __init__(self, status, **data):
-        self.status_code = status
-        self.data = data
+class BadRequest(APIException):
+    status_code = 400
+
+
+class Gone(APIException):
+    status_code = 410
