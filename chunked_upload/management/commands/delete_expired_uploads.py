@@ -6,7 +6,6 @@ from django.utils.translation import ugettext as _
 
 from chunked_upload.settings import EXPIRATION_DELTA
 from chunked_upload.models import ChunkedUpload
-from chunked_upload.constants import UPLOADING, COMPLETE, FAILED
 
 prompt_msg = _(u'Do you want to delete {obj}?')
 
@@ -19,33 +18,24 @@ class Command(BaseCommand):
     help = 'Deletes chunked uploads that have already expired.'
 
     option_list = BaseCommand.option_list + (
-        make_option('--interactive',
+        make_option('--pretend',
                     action='store_true',
-                    dest='interactive',
+                    dest='pretend',
                     default=False,
-                    help='Prompt confirmation before each deletion.'),
+                    help='Do not remove anything, just tell how many would be removed.'),
     )
 
     def handle(self, *args, **options):
-        interactive = options.get('interactive')
+        pretend = options.get('pretend')
 
-        count = {UPLOADING: 0, COMPLETE: 0, FAILED: 0}
         qs = self.model.objects.all()
+        total = qs.count()
+
         qs = qs.filter(created_on__lt=(timezone.now() - EXPIRATION_DELTA))
+        if pretend:
+            print 'Called with --pretend option, nothing done, just pretending'
+            n = qs.count()
+        else:
+            n = qs.delete()
 
-        for chunked_upload in qs:
-            if interactive:
-                prompt = prompt_msg.format(obj=chunked_upload) + u' (y/n): '
-                answer = raw_input(prompt).lower()
-                while answer not in ('y', 'n'):
-                    answer = raw_input(prompt).lower()
-                if answer == 'n':
-                    continue
-
-            count[chunked_upload.status] += 1
-            # Deleting objects individually to call delete method explicitly
-            chunked_upload.delete()
-
-        print '%i complete uploads were deleted.' % count[COMPLETE]
-        print '%i incomplete uploads were deleted.' % count[UPLOADING]
-        print '%i failed uploads were deleted.' % count[FAILED]
+        print '%d expired uplads deleted, of %d total uploads' % (n, total)
