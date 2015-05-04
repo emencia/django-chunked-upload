@@ -32,10 +32,12 @@ class Command(BaseCommand):
         total = qs.count()
 
         qs = qs.filter(created_on__lt=(timezone.now() - EXPIRATION_DELTA))
-        if pretend:
-            print 'Called with --pretend option, nothing done, just pretending'
-            n = qs.count()
-        else:
-            n = qs.delete()
+        n = qs.count()
 
-        print '%d expired uplads deleted, of %d total uploads' % (n, total)
+        print '%d uploads will be deleted of total %d' % (n, total)
+
+        if pretend:
+            print 'called with --pretend, do nothing'
+        else:
+            qs.delete()
+            print 'Done'
