@@ -4,9 +4,9 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.utils.translation import ugettext as _
 
-from .settings import EXPIRATION_DELTA
-from .models import ChunkedUpload
-from .constants import UPLOADING, COMPLETE, FAILED
+from chunked_upload.settings import EXPIRATION_DELTA
+from chunked_upload.models import ChunkedUpload
+from chunked_upload.constants import UPLOADING, COMPLETE, FAILED
 
 prompt_msg = _(u'Do you want to delete {obj}?')
 
