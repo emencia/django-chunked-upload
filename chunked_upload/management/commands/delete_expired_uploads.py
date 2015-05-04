@@ -31,7 +31,7 @@ class Command(BaseCommand):
 
         count = {UPLOADING: 0, COMPLETE: 0, FAILED: 0}
         qs = self.model.objects.all()
-        qs = qs.filter(created_on__gte=(timezone.now() - EXPIRATION_DELTA))
+        qs = qs.filter(created_on__lt=(timezone.now() - EXPIRATION_DELTA))
 
         for chunked_upload in qs:
             if interactive:
